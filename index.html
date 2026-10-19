@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>/* Contact address used by every mailto on this page: change it here only. */
+const CONTACT_EMAIL = "gm-labs@mail.grokbot.com";</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
@@ -38,10 +40,16 @@ main{max-width:980px;margin:0 auto;padding:6px 16px 20px}
 .ref{font-size:12px;color:var(--muted);margin-top:8px}.ref code{font-size:12px;background:var(--soft);padding:1px 5px;border-radius:4px}
 #map{height:560px;border:1px solid var(--line);border-radius:8px;margin-top:12px;display:none}
 .more{text-align:center;margin:16px}.more button{border:1px solid var(--line);background:#fff;border-radius:18px;padding:8px 20px;cursor:pointer;font-size:14px}
-footer{text-align:center;color:var(--muted);font-size:12px;padding:28px 16px 36px;margin-top:28px;border-top:1px solid #f1f3f4}
-footer p{margin:6px auto;max-width:720px}footer details{max-width:720px;margin:6px auto;text-align:left}footer summary{cursor:pointer;text-align:center;color:var(--muted)}footer details p{color:#5f6368;line-height:1.6}
+.i{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:4px;border-radius:50%;border:1px solid #bdc1c6;background:#fff;color:#5f6368;font:italic 600 10px/1 Georgia,serif;cursor:help;padding:0;vertical-align:middle}
+.i:hover,.i:focus-visible{border-color:var(--blue);color:var(--blue);outline:none}
+.tip{display:none;position:absolute;z-index:1000;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:240px;padding:8px 10px;border-radius:6px;background:#3c4043;color:#fff;font:400 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;text-align:left;white-space:normal;box-shadow:0 2px 6px rgba(0,0,0,.25);pointer-events:none}
+.tip::after{content:"";position:absolute;top:100%;left:50%;margin-left:-5px;border:5px solid transparent;border-top-color:#3c4043}
+.i:hover .tip,.i:focus-visible .tip,.i.open .tip,.i-badge:hover .tip,.i-badge:focus-visible .tip,.i-badge.open .tip{display:block}
+.i-badge{position:relative;border:0;cursor:help;font-family:inherit;padding:0}.i-badge .tip{left:0;transform:none;font-weight:400}.i-badge .tip::after{left:22px}
+.f label>span{display:inline-flex;align-items:center}
+footer{text-align:center;color:#80868b;font-size:12px;padding:28px 16px 36px;margin-top:28px;border-top:1px solid #f1f3f4}footer a{color:#80868b}
 .empty{padding:40px;text-align:center;color:var(--muted)}
-@media(max-width:720px){h1{font-size:25px}header{padding:26px 14px 6px}.search{flex-direction:column}.search input,.search select{flex:none;width:100%}.filters{grid-template-columns:1fr;gap:10px}
+@media(max-width:720px){.tip,.i-badge .tip{position:fixed;left:12px;right:12px;bottom:16px;top:auto;transform:none;width:auto;max-width:none;font-size:14px;padding:12px 14px}.tip::after{display:none}h1{font-size:25px}header{padding:26px 14px 6px}.search{flex-direction:column}.search input,.search select{flex:none;width:100%}.filters{grid-template-columns:1fr;gap:10px}
 .card{grid-template-columns:44px 1fr;gap:10px}.score{width:40px;height:40px;font-size:16px}.addr{font-size:16px}#map{height:420px}}
 </style>
 </head>
@@ -56,17 +64,17 @@ footer p{margin:6px auto;max-width:720px}footer details{max-width:720px;margin:6
   <input id="q" type="search" placeholder="Search an address or town, e.g. Billings, Bozeman, Livingston" aria-label="Search address or town">
 </div>
 <div class="filters">
-  <div class="f"><label for="units">Minimum units <b id="unitsv">2+</b></label><input id="units" type="range" min="2" max="50" value="2"></div>
-  <div class="f"><label for="score">Minimum score <b id="scorev">4</b></label><input id="score" type="range" min="4" max="12" value="4"></div>
-  <div class="f"><label for="tax">Minimum back taxes owed <b id="taxv">$0</b></label><input id="tax" type="range" min="0" max="20000" step="250" value="0"></div>
+  <div class="f"><label for="units"><span>Minimum units <button type="button" class="i" aria-label="What is minimum units?" aria-expanded="false" data-tip="units">i<span class="tip" role="tooltip">Number of rental units in the building. Set a higher minimum to see only bigger properties.</span></button></span><b id="unitsv">2+</b></label><input id="units" type="range" min="2" max="50" value="2"></div>
+  <div class="f"><label for="score"><span>Minimum score <button type="button" class="i" aria-label="What is minimum score?" aria-expanded="false" data-tip="score">i<span class="tip" role="tooltip">Score adds up the warning signs on a property. Higher means more likely to sell. 4+ is a solid lead.</span></button></span><b id="scorev">4</b></label><input id="score" type="range" min="4" max="12" value="4"></div>
+  <div class="f"><label for="tax"><span>Minimum back taxes owed <button type="button" class="i" aria-label="What is minimum back taxes owed?" aria-expanded="false" data-tip="tax">i<span class="tip" role="tooltip">Unpaid property taxes on the parcel. Owners who fall behind are often under money pressure and open to an offer.</span></button></span><b id="taxv">$0</b></label><input id="tax" type="range" min="0" max="20000" step="250" value="0"></div>
 </div>
 <div class="checks" id="checks">
-  <label class="chip"><input type="checkbox" value="sale">Trustee / sheriff sale</label>
-  <label class="chip"><input type="checkbox" value="tax">Tax delinquent</label>
-  <label class="chip"><input type="checkbox" value="code_open">Open code case</label>
-  <label class="chip"><input type="checkbox" value="absentee">Absentee owner</label>
-  <label class="chip"><input type="checkbox" value="out_of_state">Out-of-state owner</label>
-  <label class="chip"><input type="checkbox" value="long_owned">Owned 10+ years</label>
+  <label class="chip"><input type="checkbox" value="sale">Trustee / sheriff sale <button type="button" class="i" aria-label="What is trustee / sheriff sale?" aria-expanded="false" data-tip="sale">i<span class="tip" role="tooltip">A foreclosure (trustee) or sheriff sale is scheduled. The owner has a deadline, so a quick sale can beat losing the property.</span></button></label>
+  <label class="chip"><input type="checkbox" value="tax">Tax delinquent <button type="button" class="i" aria-label="What is tax delinquent?" aria-expanded="false" data-tip="taxd">i<span class="tip" role="tooltip">The owner is behind on property taxes. Growing back taxes are a common sign of a tired or stretched owner.</span></button></label>
+  <label class="chip"><input type="checkbox" value="code_open">Open code case <button type="button" class="i" aria-label="What is open code case?" aria-expanded="false" data-tip="code">i<span class="tip" role="tooltip">The city has an open code-enforcement case on the property. Repairs cost money, and some owners would rather sell.</span></button></label>
+  <label class="chip"><input type="checkbox" value="absentee">Absentee owner <button type="button" class="i" aria-label="What is absentee owner?" aria-expanded="false" data-tip="abs">i<span class="tip" role="tooltip">The owner doesn't live at the property. Remote owners tend to be less attached and more willing to sell.</span></button></label>
+  <label class="chip"><input type="checkbox" value="out_of_state">Out-of-state owner <button type="button" class="i" aria-label="What is out-of-state owner?" aria-expanded="false" data-tip="oos">i<span class="tip" role="tooltip">The owner lives outside Montana. Managing a rental from far away is hard, so these owners often want out.</span></button></label>
+  <label class="chip"><input type="checkbox" value="long_owned">Owned 10+ years <button type="button" class="i" aria-label="What is owned 10+ years?" aria-expanded="false" data-tip="long">i<span class="tip" role="tooltip">Same owner for 10+ years. Long-time owners often have lots of equity and may be ready to retire or cash out.</span></button></label>
 </div>
 <div class="bar">
   <span class="count" id="count">Loading…</span>
@@ -78,28 +86,21 @@ footer p{margin:6px auto;max-width:720px}footer details{max-width:720px;margin:6
   <div class="more" id="more" hidden><button>Show more</button></div>
   <div id="map"></div>
 </main>
-<footer>
-  <p class="asof" id="asof">…</p>
-  <details><summary>How scoring works</summary>
-    <p>Back taxes 1–4 points, scaled to the property's value (+1 if more than one year is owed) · trustee or sheriff sale scheduled +4 · trustee-sale notice recorded +2 · open city code case +2 (+1 if dangerous) · owned 20+ years +2, 10+ years +1 · owner out of state +2, elsewhere in Montana +1 · estate +2, trust +1. Every lead scores 4+ and has at least one hard signal (back taxes, a sale, a recorded notice or an open code case).</p>
-    <p>No owner names, by design. To see the owner of record, search the geocode on Montana Cadastral or the tax ID on the county treasurer's site.</p>
-  </details>
-  <p><a href="mailto:gm-labs@mail.grokbot.com">gm-labs@mail.grokbot.com</a> · GM Labs</p>
-</footer>
+<footer>GM Labs · Data from public county records, updated Oct 2026 · <a id="contact" href="#">Contact</a></footer>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id), money = n => "$" + Math.round(n).toLocaleString("en-US");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let all = [], shown = [], page = 30, map, layer, view = "list";
-const linkName = u => u.includes("csadelin") ? "County tax page" : u.includes("halliday") ? "Trustee sale list" : u.includes("SheriffSales") ? "Sheriff sale list" : "Source";
+const linkName = u => u.includes("csadelin") ? "County tax page" : u.includes("bids.htm") ? "Trustee sale list" : u.includes("SheriffSales") ? "Sheriff sale list" : "Source";
 function card(L) {
   const cls = L.score >= 8 ? "s8" : L.score >= 6 ? "s6" : "";
   const meta = [L.city !== "unknown" ? L.city : "", L.county + " County", L.units + " units", L.year_built !== "unknown" ? "built " + L.year_built : "",
                 typeof L.value === "number" ? "assessed " + money(L.value) : ""].filter(Boolean).join(" · ");
   const sig = L.signals.map(s => `<li class="${/sale|taxes|code/i.test(s) ? "hot" : ""}">${esc(s)}</li>`).join("");
   const links = L.links.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${linkName(u)}</a>`).join(" · ");
-  return `<div class="card"><div class="score ${cls}" title="Motivation score">${L.score}</div><div>
+  return `<div class="card"><button type="button" class="score ${cls} i-badge" aria-label="Score ${L.score}. What is the score?" aria-expanded="false">${L.score}<span class="tip" role="tooltip">Score adds up the warning signs on this property. Higher means more likely to sell. 4+ is a solid lead.</span></button><div>
     <p class="addr">${esc(L.address)}</p><p class="meta">${esc(meta)}</p><ul class="sig">${sig}</ul>
     <div class="ref">Tax ID <code>${esc(L.tax_id)}</code> · Geocode <code>${esc(L.geocode.join(", "))}</code>${links ? " · " + links : ""}</div></div></div>`;
 }
@@ -142,11 +143,18 @@ function setView(v) {
 $("checks").addEventListener("change", apply);
 $("more").querySelector("button").onclick = () => { page += 30; render(); };
 $("tList").onclick = () => setView("list"); $("tMap").onclick = () => setView("map");
+const tips = () => document.querySelectorAll(".i.open,.i-badge.open");
+const closeTips = except => tips().forEach(b => { if (b !== except) { b.classList.remove("open"); b.setAttribute("aria-expanded", "false"); } });
+document.addEventListener("click", e => {
+  const b = e.target.closest(".i,.i-badge");
+  if (!b) { closeTips(); return; }
+  e.preventDefault(); e.stopPropagation();               // don't toggle the checkbox the icon sits in
+  closeTips(b); const on = !b.classList.contains("open"); b.classList.toggle("open", on); b.setAttribute("aria-expanded", String(on));
+}, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeTips(); });
+$("contact").href = "mailto:" + CONTACT_EMAIL;
 fetch("assets/s7.dat").then(r => r.json()).then(d => {
   all = d.r; $("score").max = Math.max(...all.map(x => x.score), 5);
-  $("asof").innerHTML = "Data as of: " + Object.entries(d.a).map(([c, a]) => `${c} property data ${esc(a.property_data)}; tax list ${esc(a.tax_list)}` +
-      (a.tax_status_rechecked ? ` (current tax year re-checked ${esc(a.run_date)})` : ` (live county list)`)).join(" · ") +
-      ` · sales, code cases and owner flags ${esc(d.g)}`;
   apply(); if (location.hash === "#map") setView("map");
 }).catch(() => { $("count").textContent = "Could not load the data. Please refresh."; });
 })();
