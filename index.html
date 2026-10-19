@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>GM Labs · Montana Distressed Rental Finder</title>
-<meta name="description" content="Search scored motivated-seller leads for Montana duplexes to apartment buildings.">
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 :root{--ink:#202124;--muted:#5f6368;--line:#dadce0;--blue:#1a73e8;--red:#d93025;--green:#188038;--amber:#f9ab00;--bg:#fff;--soft:#f8f9fa}
@@ -84,7 +84,7 @@ footer p{margin:6px auto;max-width:720px}footer details{max-width:720px;margin:6
     <p>Back taxes 1–4 points, scaled to the property's value (+1 if more than one year is owed) · trustee or sheriff sale scheduled +4 · trustee-sale notice recorded +2 · open city code case +2 (+1 if dangerous) · owned 20+ years +2, 10+ years +1 · owner out of state +2, elsewhere in Montana +1 · estate +2, trust +1. Every lead scores 4+ and has at least one hard signal (back taxes, a sale, a recorded notice or an open code case).</p>
     <p>No owner names, by design. To see the owner of record, search the geocode on Montana Cadastral or the tax ID on the county treasurer's site.</p>
   </details>
-  <p><a href="https://apify.com/appetizing_horsefly/mt-distressed-rental-finder" target="_blank" rel="noopener">Run the full tool on Apify</a> · <a href="mailto:gm-labs@mail.grokbot.com">gm-labs@mail.grokbot.com</a> · GM Labs</p>
+  <p><a href="mailto:gm-labs@mail.grokbot.com">gm-labs@mail.grokbot.com</a> · GM Labs</p>
 </footer>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
@@ -142,11 +142,11 @@ function setView(v) {
 $("checks").addEventListener("change", apply);
 $("more").querySelector("button").onclick = () => { page += 30; render(); };
 $("tList").onclick = () => setView("list"); $("tMap").onclick = () => setView("map");
-fetch("data/leads.json").then(r => r.json()).then(d => {
-  all = d.leads; $("score").max = Math.max(...all.map(x => x.score), 5);
-  $("asof").innerHTML = "Data as of: " + Object.entries(d.as_of).map(([c, a]) => `${c} property data ${esc(a.property_data)}; tax list ${esc(a.tax_list)}` +
+fetch("assets/s7.dat").then(r => r.json()).then(d => {
+  all = d.r; $("score").max = Math.max(...all.map(x => x.score), 5);
+  $("asof").innerHTML = "Data as of: " + Object.entries(d.a).map(([c, a]) => `${c} property data ${esc(a.property_data)}; tax list ${esc(a.tax_list)}` +
       (a.tax_status_rechecked ? ` (current tax year re-checked ${esc(a.run_date)})` : ` (live county list)`)).join(" · ") +
-      ` · sales, code cases and owner flags ${esc(d.generated)}`;
+      ` · sales, code cases and owner flags ${esc(d.g)}`;
   apply(); if (location.hash === "#map") setView("map");
 }).catch(() => { $("count").textContent = "Could not load the data. Please refresh."; });
 })();
