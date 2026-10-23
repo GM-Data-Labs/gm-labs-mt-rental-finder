@@ -40,7 +40,7 @@ main{max-width:980px;margin:0 auto;padding:6px 16px 20px}
 .gm{display:block;margin-top:4px;font-size:11px;line-height:1.3;text-align:center;color:var(--muted)}
 .score{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-top:2px;color:#fff;background:var(--amber)}
 .score.s6{background:#e37400}.score.s8{background:var(--red)}
-.addr{font-size:18px;color:#1a0dab;margin:0}.addr a{color:inherit;text-decoration:none}.addr a:hover{text-decoration:underline}.meta{color:var(--muted);font-size:13px;margin:2px 0 6px}
+.addr{font-size:18px;color:#1a0dab;margin:0}.addr a{color:inherit;text-decoration:none}.addr a:hover{text-decoration:underline}.leaflet-popup-content a.pa{color:#1a0dab;text-decoration:underline;display:inline-block;padding:4px 0;min-height:32px;line-height:24px}.meta{color:var(--muted);font-size:13px;margin:2px 0 6px}
 .sig{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}.sig li{font-size:13px;background:var(--soft);border:1px solid #eee;border-radius:12px;padding:2px 10px}
 .sig li.hot{background:#fce8e6;border-color:#fad2cf;color:#a50e0e}
 .ref{font-size:12px;color:var(--muted);margin-top:8px}.ref code{font-size:12px;background:var(--soft);padding:1px 5px;border-radius:4px}
@@ -132,6 +132,7 @@ const PER = 10; let all = [], shown = [], pg = 1, map, layer, view = "list";
 const SV_KEY = "";
 const PH = '<div class="thumb ph" aria-hidden="true"></div>';
 const svLoc = L => L.lat && L.lon ? L.lat + "," + L.lon : [L.address, L.city !== "unknown" ? L.city : "", "MT"].filter(Boolean).join(", ");
+const mapsHref = L => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(svLoc(L))}`;
 const svHref = L => L.lat && L.lon ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${L.lat},${L.lon}`
                                   : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(svLoc(L))}`;
 const PEG = '<svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true"><circle cx="5" cy="2.2" r="2.2" fill="#fbbc04"/><path d="M2 5.2h6l-.6 3.3H6.3L5.9 12H4.1l-.4-3.5H2.6z" fill="#fbbc04"/></svg>';
@@ -202,7 +203,7 @@ function drawMap() {
   shown.filter(x => x.lat).forEach(x => {
     const col = x.score >= 8 ? "#d93025" : x.score >= 6 ? "#e37400" : "#f9ab00";
     L.circleMarker([x.lat, x.lon], {radius: 6 + Math.min(x.units, 40) / 8, color: "#fff", weight: 1.5, fillColor: col, fillOpacity: .9})
-     .bindPopup(`<b>${esc(x.address)}</b><br>Score ${x.score} · ${x.units} units<br>${x.signals.slice(0, 3).map(esc).join("<br>")}`).addTo(layer);
+     .bindPopup(`<a class="pa" href="${esc(mapsHref(x))}" target="_blank" rel="noopener"><b>${esc(x.address)}</b></a><br>Score ${x.score} · ${x.units} units<br>${x.signals.slice(0, 3).map(esc).join("<br>")}`).addTo(layer);
     pts.push([x.lat, x.lon]);
   });
   setTimeout(() => { map.invalidateSize(); pts.length ? map.fitBounds(pts, {padding: [30, 30], maxZoom: 14}) : map.setView([46.0, -110.0], 7); }, 0);
