@@ -157,6 +157,19 @@ def clean_address(raw):
     street = " ".join(_tc(t) for t in street.split())
     return (num + " " + street).strip()
 
+_SUFFIX = r"(?:ST|STREET|AVE|AVENUE|AV|BLVD|RD|ROAD|DR|DRIVE|LN|LANE|CT|COURT|PL|PLACE|WAY|CIR|CIRCLE|TER|TERRACE|PKWY|LOOP|TRL|TRAIL|SQ|PT|ALY|HTS|XING|RUN|ROW|PATH|PASS)"
+_TRAILING_NO = re.compile(r"^(\d.*?\s" + _SUFFIX + r"(?:\s+(?:N|S|E|W|NE|NW|SE|SW))?)\s+\d{1,4}[A-Z]?$", re.I)
+_NUMBERED_ROUTE = re.compile(r"\b(?:COUNTY|CO|STATE|US|FOREST|FS|HIGHWAY|HWY|INTERSTATE|ROUTE|RTE|SR)\s+" + _SUFFIX + r"\s+\d+[A-Z]?$", re.I)
+def strip_trailing_unit_no(a):
+    """Some county rolls append a bare unit/building number after the street ('739 N GRANT ST 1').
+    Drop it only when it directly follows a street suffix (or suffix + direction) with no unit keyword;
+    keeps '12 Main St Apt 3', '#4', 'Unit B' and numbered routes like 'County Rd 12'."""
+    if not a: return a
+    s = re.sub(r"\s+", " ", a.strip())
+    if UNIT_RE.search(s) or _NUMBERED_ROUTE.search(s): return s
+    m = _TRAILING_NO.match(s)
+    return m.group(1) if m else s
+
 def street_key(addr):
     n = norm_addr(re.sub(r"^\d+[A-Z]?(?:\s*[,&-]\s*\d+[A-Z]?)*(?:\s+\d/\d)?\s+", "", (addr or "").strip().upper())).split()
     return " ".join(n) or None

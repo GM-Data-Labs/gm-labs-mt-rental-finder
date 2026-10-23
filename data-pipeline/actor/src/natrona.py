@@ -8,7 +8,7 @@ Treasurer/assessor pages show the owner's name, so they are read for tax status 
 import collections, datetime as dt, gzip, html as htmlmod, json, os, re, time
 import requests
 from apify import Actor
-from common import HARD_SIGNALS, MIN_DELINQUENT_USD, addr_key, is_unit_address, score, tax_tier
+from common import HARD_SIGNALS, MIN_DELINQUENT_USD, addr_key, clean_address, is_unit_address, score, strip_trailing_unit_no, tax_tier
 
 HERE = os.path.dirname(os.path.abspath(__file__)); DATA = os.path.join(os.path.dirname(HERE), "data")
 TREAS = "https://treasurersearch.natronacounty-wy.gov/"
@@ -81,7 +81,7 @@ def run(min_score=4):
         if T:
             pts, lab, hard, pct = tax_tier(due, p.get("value"))
             sig.update(tax_points=pts, tax_delinquent_hard=hard, tax_delinquent_multi_year=len(T["by_year"]) > 1)
-        k = addr_key(p.get("addr_raw") or p.get("addr") or "")
+        raw = strip_trailing_unit_no(p.get("addr_raw") or p.get("addr") or ""); k = addr_key(raw)
         if k and k in sale: sig["foreclosure_sale"] = True
         yo = 10.0 if p.get("owned10") else 5.0 if p.get("owned5") else None
         if yo: sig["years_owned"] = yo
@@ -94,7 +94,7 @@ def run(min_score=4):
             ys = sorted(T["by_year"]); S_.append(f"TAX DELINQUENT {', '.join(map(str, ys))} ${due:,.0f} (excl. interest; county tax page {asof}; status: {T['status']})")
         if sig.get("foreclosure_sale"): S_.append(f"FORECLOSURE {sale[k]}")
         leads.append({"parcel_id": p.get("geo"), "property_id": None, "tax_id": p["acct"], "county": "Natrona", "state": "WY",
-            "address": p.get("addr") or p.get("addr_raw"), "address_raw": p.get("addr_raw"), "city": p.get("city"), "units": p["units"],
+            "address": clean_address(raw) or p.get("addr"), "address_raw": p.get("addr_raw"), "city": p.get("city"), "units": p["units"],
             "size_class": "5+" if p["units"] >= 5 else "2-4", "year_built": p.get("yb") or "unknown", "assessed_value": p.get("value") or "unknown",
             "property_type": p.get("occ"), "owner_type": "trust_estate" if (p.get("estate") or p.get("trust")) else "other",
             "absentee_owner": "yes" if (p.get("out_of_state") or p.get("nonlocal_instate")) else "no", "out_of_state_owner": "yes" if p.get("out_of_state") else "no",
