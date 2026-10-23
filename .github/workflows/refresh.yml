@@ -1,6 +1,6 @@
 name: Weekly data refresh
 # Runs the Actor's scoring code directly on the GitHub runner ($0: no Apify runs, no secrets).
-# Commits assets/s7.dat only if it changed. Any error, a failed critical source, or 0 leads -> job fails, data untouched.
+# Commits assets/s7.dat only if it changed. Per county: an error, a failed critical source or 0 leads keeps that county's previous data; if every county fails, the job fails and nothing changes.
 on:
   schedule:
     - cron: "0 13 * * 1"   # Mondays 13:00 UTC (6am Pacific)
@@ -13,7 +13,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

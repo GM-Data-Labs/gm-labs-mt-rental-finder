@@ -12,6 +12,7 @@ COUNTIES = {
     "Yellowstone": {"orion": 3, "fips": "30111", "seat": "Billings"},
     "Gallatin": {"orion": 6, "fips": "30031", "seat": "Bozeman"},
     "Park": {"orion": 49, "fips": "30067", "seat": "Livingston"},
+    "Missoula": {"orion": 4, "fips": "30063", "seat": "Missoula"},
 }
 
 def tax_id(county, assessment_code):
@@ -23,7 +24,7 @@ def tax_id(county, assessment_code):
         return a[3:9] + (a[9] if len(a) > 9 and a[9].isalpha() else "")
     if county == "Gallatin":
         return a.lstrip("0") or None   # 00REF42631 -> REF42631 (matches treasurer parcelNo)
-    return a or None                   # Park: 10-digit parcel number used as-is
+    return a or None                   # Park / Missoula: 10-digit parcel number used as-is (Missoula iTax taxid)
 
 EST_RE = re.compile(r"\b(ESTATE|EST OF|ESTATE OF|DECD|DECEASED|HEIRS|PERS(ONAL)? REP|PR OF|LIFE EST(ATE)?|DEVISEES)\b")
 TRUST_RE = re.compile(r"\b(TRUST|TRUSTEE|TRUSTEES|TRST|TRS|TR|LIVING TR|REV TR|REVOCABLE)\b")

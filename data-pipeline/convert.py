@@ -25,6 +25,14 @@ def tax_signal(L):
     years, amt = L["tax_delinquent_years"], L["tax_delinquent_amount"]
     m = re.search(r"county list dated ([\d/]+)", raw)
     listed = m.group(1).lstrip("0").replace("/0", "/") if m else (L.get("data_as_of") or {}).get("treasurer_list", "")
+    listed = listed.split(" (")[0]
+    if L["county"] == "Natrona":    # WY: found by the per-account check on the county treasurer's tax page
+        d = (L.get("data_as_of") or {}).get("treasurer_pages", "")
+        out = [f"Back taxes ${amt:,.0f} (excl. interest; {yrs(years)} bill; county tax page {mdy(d) if d else ''})"]
+        if L.get("tax_certificate_issued"): out.append("Taxes sold at the county tax sale (certificate of purchase issued; owner must redeem)")
+        return out
+    if L["county"] == "Missoula":   # no county list: found by the capped per-parcel check on the county tax page
+        return [f"Back taxes ${amt:,.0f} (excl. penalty & interest; {yrs(years)}; checked on county tax page {listed})"]
     ok = {int(y): d for y, d in re.findall(r"(\d{4}) confirmed unpaid on the county tax page (\d{4}-\d\d-\d\d)", raw)}
     ok.update({int(y): d for y, d in re.findall(r"(\d{4}) bill on county page is [^;]*?nothing paid, checked (\d{4}-\d\d-\d\d)", raw)})
     paid = {int(y): d for y, d in re.findall(r"(\d{4}) shows as paid on the county tax page[^;]*?checked (\d{4}-\d\d-\d\d)", raw)}
@@ -76,16 +84,20 @@ def centroids(pids):
 
 def main():
     src = json.load(open(os.path.join(HERE, "out", "leads.json")))
-    for c, st in src["stats"].items():
+    prev_r = json.load(open(OUT))["r"] if os.path.exists(OUT) else []
+    good, keep = set(), []
+    for c, st in src["stats"].items():          # per county: a failed county keeps its previous records; the others update
         bad = CRITICAL & set(st.get("sources_failed") or [])
-        if bad: sys.exit(f"{c}: critical source(s) failed ({', '.join(sorted(bad))}); not publishing")
-    leads = sorted(src["leads"], key=lambda L: (-L["score"], -(L["units"] or 0), L["parcel_id"] or ""))
-    if not leads: sys.exit("0 leads; not publishing")
-    if FREE_CAP: leads = leads[:FREE_CAP]
+        why = st.get("error") or (f"critical source(s) failed: {', '.join(sorted(bad))}" if bad else None) or ("0 leads" if not st.get("rows") else None)
+        if why:
+            kept = [x for x in prev_r if x["county"] == c]; keep += kept
+            print(f"{c}: {why}; keeping its previous {len(kept)} leads")
+        else: good.add(c)
+    if not good: sys.exit("no county refreshed cleanly; not publishing")
+    leads = sorted([L for L in src["leads"] if L["county"] in good], key=lambda L: (-L["score"], -(L["units"] or 0), L["parcel_id"] or ""))
     old = {}
-    if os.path.exists(OUT):
-        for x in json.load(open(OUT))["r"]:
-            for g in x.get("geocode") or []: old[g] = x
+    for x in prev_r:
+        for g in x.get("geocode") or []: old[g] = x
     need = [L["property_id"] for L in leads if L.get("property_id") and not any(old.get(g, {}).get("lat") for g in L["merged_parcel_ids"])]
     cen = centroids(need) if need else {}
     r = []
@@ -100,10 +112,15 @@ def main():
              "long_owned": isinstance(L.get("years_owned"), (int, float)) and L["years_owned"] >= 10,
              "years_owned": num(L.get("years_owned")), "signals": signals(L), "geocode": L["merged_parcel_ids"],
              "tax_id": L["tax_id"], "links": L.get("source_links") or []}
-        ll = (prev["lat"], prev["lon"]) if prev.get("lat") else cen.get(L.get("property_id"))
+        ll = (prev["lat"], prev["lon"]) if prev.get("lat") else (L["lat"], L["lon"]) if L.get("lat") else cen.get(L.get("property_id"))
         if ll: x["lat"], x["lon"] = ll
         if prev.get("img") and os.path.exists(os.path.join(HERE, "..", prev["img"])): x["img"] = prev["img"]
         r.append(x)
+    r += [x for x in prev_r if x["county"] not in good and x["county"] not in src["stats"]]   # counties not run at all: keep
+    r += keep
+    r.sort(key=lambda x: (-x["score"], -(x["units"] or 0)))
+    if FREE_CAP: r = r[:FREE_CAP]
+    if not r: sys.exit("0 leads; not publishing")
     new = json.dumps({"r": r}, ensure_ascii=False, separators=(",", ":"))
     open(OUT, "w").write(new)
     print(f"s7.dat: {len(r)} leads ({sum('img' in x for x in r)} with aerial, {sum('lat' in x for x in r)} with lat/lon)")

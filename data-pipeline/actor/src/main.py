@@ -30,7 +30,7 @@ BIL_CODE = "https://billingsgis.com/arcgis_public/rest/services/ArcOnline_Public
 # NOT linked (Boss rule 2026-10-19: no links to pages that show owner names, mailing addresses or document parties):
 # Montana Cadastral parcel pages, Gallatin / Park iTax pages, Yellowstone recorder documents, Billings code-case records.
 # Each row carries the plain-text id instead (geocode, tax id, document number) plus a note on where to look it up.
-TAX_SITE = {"Gallatin": "the Gallatin County Treasurer's online tax search (iTax)", "Park": "the Park County Treasurer's online tax search (iTax)"}
+TAX_SITE = {"Gallatin": "the Gallatin County Treasurer's online tax search (iTax)", "Park": "the Park County Treasurer's online tax search (iTax)", "Missoula": "the Missoula County Treasurer's online tax search (iTax)"}
 ITAX_DETAIL = {"Gallatin": "https://itax.gallatin.mt.gov/detail.aspx?taxid={}", "Park": "https://itax.tylertech.com/ParkMT/detail.aspx?taxid={}"}
 MIXED_NA = "n/a (only assessed for 5+ units)"
 ASSIGN_ASOF = None # date of the tax-lien assignment snapshot (Yellowstone), set by delinq_yellowstone()
@@ -177,9 +177,62 @@ def delinq_park():
                                        "as_of": m.group(1) if m else None}
     return recs
 
+MSO_ITAX = "https://itax.missoulacounty.us/itax/"
+MSO_TREAS_PAGE = "https://www.missoulacounty.gov/departments/clerk-treasurer/property-taxes/delinquent-taxes/"
+MSO_CAP, MSO_GAP = 200, 1.2     # at most 200 parcels (2 pages each) per run, 1.2 s apart (no robots.txt on the host; stay gentle)
+def delinq_missoula(parcels, cad):
+    """Missoula publishes no delinquent list (request form only). Instead, the top MSO_CAP multifamily parcels by
+    ownership signals are checked one by one on the county's free iTax pages: the detail page (opens the parcel), then
+    the payoff page's per-half unpaid rows (always: Status only describes the current tax year). A half counts as delinquent once its due date has passed; only the
+    tax amount is used (penalty & interest excluded). Owner fields on the pages are never read."""
+    def pre(p):
+        if p.get("ptype") in EXCLUDE_PTYPES or p.get("owner_type") == "government_nonprofit" or not p.get("tax"): return None
+        y = 0
+        if p.get("deed"):
+            try: y = (TODAY - dt.date.fromisoformat(p["deed"][:10])).days / 365.25
+            except ValueError: y = 0
+        return (2 if y >= 20 else 1 if y >= 10 else 0) + (2 if p.get("out_of_state") else 1 if p.get("nonlocal_instate") else 0) + \
+               (2 if p.get("estate") else 1 if p.get("trust") else 0), p["units"]
+    ranked = [p for r, p in sorted(((pre(p), p) for p in parcels if pre(p)), key=lambda x: (-x[0][0], -x[0][1], x[1]["pid"]))][:MSO_CAP]
+    S = requests.Session(); S.headers.update(UA); last = [0.0]
+    def g(path):
+        w = last[0] + MSO_GAP - time.time()
+        if w > 0: time.sleep(w)
+        try: return S.get(MSO_ITAX + path, timeout=(10, 20)).text
+        finally: last[0] = time.time()
+    g("default.aspx")                                          # session cookie; detail pages redirect without it
+    recs, statuses, errors, t0 = {}, collections.Counter(), 0, time.time()
+    for i, p in enumerate(ranked):
+        if time.time() - t0 > 900: break                       # hard 15-minute budget
+        tid = p["tax"].lstrip("0")
+        try:
+            h = g(f"detail.aspx?taxid={tid}")
+            m = re.search(r'id="_ctl0_ContentPlaceHolder1_lblStatus"[^>]*>(.*?)</', h, re.S)
+            if not m:
+                if "default.aspx" in h[:3000] or "No records found" in h: g("default.aspx")
+                errors += 1; continue
+            st = strip_tags(m.group(1)); statuses[st] += 1
+            t = re.sub(r"\s+", " ", strip_tags(re.sub(r"<(script|style).*?</\1>", "", g("payoff.aspx"), flags=re.S | re.I).replace("<", " <")))
+            by = {}
+            for yr, due, half, amt in re.findall(r"\b(\d{4}) (\d{1,2}/\d{1,2}/\d{4}) \d+ (1st|2nd) \$([\d,]+\.\d\d)", t):
+                mo, d, y = map(int, due.split("/"))
+                if dt.date(y, mo, d) < SALE_TODAY: by[int(yr)] = by.get(int(yr), 0.0) + money(amt)
+            by = {y: round(a, 2) for y, a in by.items() if a > 0.005}
+            if by: recs[p["tax"]] = {"years": set(by), "due": round(sum(by.values()), 2), "by_year": by}
+        except Exception as e:
+            errors += 1; Actor.log.warning(f"Missoula iTax check failed for one parcel: {scrub(e)}")
+        if errors > 25 and errors > 0.2 * (i + 1): raise RuntimeError(f"Missoula iTax: {errors} failed checks out of {i + 1}; stopping")
+    n = sum(statuses.values())
+    if n == 0: raise RuntimeError("Missoula iTax: no parcel could be checked")
+    SOURCES["treasurer_delinquent"] = {"ok": True, "rows": len(recs), "checked": n, "errors": errors, "statuses": dict(statuses),
+                                       "source": "Missoula County Clerk & Treasurer iTax (per-parcel pages, top parcels by ownership signals only)",
+                                       "list": f"no public list; {n} top-ranked parcels checked on the county tax pages", "as_of": f"{TODAY.month}/{TODAY.day}/{TODAY.year}"}
+    Actor.log.info(f"Missoula iTax: checked {n} parcels in {time.time() - t0:.0f}s, statuses {dict(statuses)}, delinquent {len(recs)}, errors {errors}")
+    return recs
+
 SAFE_URL_PREFIXES = (YC + "/treasurer/propertysearch/csadelin.asp", YC + "/Sheriff/SheriffSales.asp", YC + "/treasurer/TaxSales.asp",
-                     HWM_MT, GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
-DELINQ = {"Yellowstone": delinq_yellowstone, "Gallatin": delinq_gallatin, "Park": delinq_park}
+                     HWM_MT, GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, MSO_TREAS_PAGE, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
+DELINQ = {"Yellowstone": delinq_yellowstone, "Gallatin": delinq_gallatin, "Park": delinq_park, "Missoula": delinq_missoula}
 TREAS_LINK = {"Yellowstone": lambda tid: f"{YC}/treasurer/propertysearch/csadelin.asp?propid={tid}"}   # csadelin shows no owner name
 # Billings code-case records are NOT linked: the city's case pages show the owner's name and mailing address.
 
@@ -445,7 +498,7 @@ async def main():
             cty, lv = situs_city(r.get("CityStateZip")), (r.get("LevyDistrict") or "").strip()
             if cty and lv: _lc.setdefault(lv, collections.Counter())[cty] += 1
         levy_city = {lv: C.most_common(1)[0][0] for lv, C in _lc.items() if C.most_common(1)[0][1] >= 5 and C.most_common(1)[0][1] >= 0.9 * sum(C.values())}
-        delq = safe("treasurer_delinquent", DELINQ[county], {})
+        delq = safe("treasurer_delinquent", (lambda: delinq_missoula(parcels, cad)) if county == "Missoula" else DELINQ[county], {})
         fc = safe("foreclosure_firm_list", lambda: hwm_sales(county), {})
         sh, co, cc = {}, {}, {}
         if county == "Yellowstone":
