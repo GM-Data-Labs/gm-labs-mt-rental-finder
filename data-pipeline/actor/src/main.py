@@ -33,7 +33,7 @@ BIL_CODE = "https://billingsgis.com/arcgis_public/rest/services/ArcOnline_Public
 # Each row carries the plain-text id instead (geocode, tax id, document number) plus a note on where to look it up.
 TAX_SITE = {"Gallatin": "the Gallatin County Treasurer's online tax search (iTax)", "Park": "the Park County Treasurer's online tax search (iTax)", "Missoula": "the Missoula County Treasurer's online tax search (iTax)",
             "Cascade": "the Cascade County Treasurer's online tax search (iTax)", "Lewis and Clark": "the Lewis and Clark County Treasurer's office",
-            "Silver Bow": "the Butte-Silver Bow Treasurer's office"}
+            "Silver Bow": "the Butte-Silver Bow Treasurer's online tax search (iTax)"}
 ITAX_DETAIL = {"Gallatin": "https://itax.gallatin.mt.gov/detail.aspx?taxid={}", "Park": "https://itax.tylertech.com/ParkMT/detail.aspx?taxid={}"}
 MIXED_NA = "n/a (only assessed for 5+ units)"
 ASSIGN_ASOF = None # date of the tax-lien assignment snapshot (Yellowstone), set by delinq_yellowstone()
@@ -233,9 +233,33 @@ def delinq_missoula(parcels, cad):
     Actor.log.info(f"Missoula iTax: checked {n} parcels in {time.time() - t0:.0f}s, statuses {dict(statuses)}, delinquent {len(recs)}, errors {errors}")
     return recs
 
+SB_DEED_LIST = "https://www.co.silverbow.mt.us/DocumentCenter/View/37936/Tax-Deed-property-list-2026"
+SB_ITAX = "https://itax.tylertech.com/ButteSilverBowMT/detail.aspx?taxid={}"   # not linked: the page shows the owner's name and mailing address
+def delinq_silverbow():
+    """Butte-Silver Bow 'Current Delinquent Property List' (XLSX): parcels at the tax-deed stage (3+ years unpaid). Only column A
+    (parcel #) is read; the other columns name the owners and are never parsed. The list has no amounts, so every multifamily
+    parcel on it is re-checked on the county's iTax page before it can score (see the candidate loop)."""
+    import io, zipfile, xml.etree.ElementTree as ET
+    z = zipfile.ZipFile(io.BytesIO(get(SB_DEED_LIST, binary=True, timeout=60))); names = z.namelist()
+    M = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ss = ["".join(t.text or "" for t in si.iter(M + "t")) for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(M + "si")] if "xl/sharedStrings.xml" in names else []
+    recs = {}
+    for c in ET.fromstring(z.read(sorted(n for n in names if n.startswith("xl/worksheets/sheet"))[0])).iter(M + "c"):
+        if not re.fullmatch(r"A\d+", c.get("r", "")): continue
+        v = c.find(M + "v"); v = (v.text or "") if v is not None else ""
+        if c.get("t") == "s" and v.isdigit(): v = ss[int(v)]
+        v = v.strip()
+        if re.fullmatch(r"\d{3,10}(?:\.0)?", v): recs[v.split(".")[0].zfill(10)] = {"years": set(), "due": 0.0, "by_year": {}, "tax_deed": True}
+    if not recs: raise RuntimeError("Silver Bow tax-deed list: no parcel numbers found")
+    m = re.search(r"modified[^>]*>(\d{4})-(\d\d)-(\d\d)", z.read("docProps/core.xml").decode("utf-8", "ignore")) if "docProps/core.xml" in names else None
+    SOURCES["treasurer_delinquent"] = {"ok": True, "rows": len(recs), "source": "Butte-Silver Bow Treasurer: Current Delinquent Property List (tax-deed stage)",
+                                       "list": "Butte-Silver Bow tax-deed property list (XLSX, not linked: it prints owner names)",
+                                       "as_of": f"{int(m.group(2))}/{int(m.group(3))}/{m.group(1)}" if m else None}
+    return recs
+
 SAFE_URL_PREFIXES = (YC + "/treasurer/propertysearch/csadelin.asp", YC + "/Sheriff/SheriffSales.asp", YC + "/treasurer/TaxSales.asp",
-                     *HWM.values(), GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, MSO_TREAS_PAGE, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
-DELINQ = {"Yellowstone": delinq_yellowstone, "Gallatin": delinq_gallatin, "Park": delinq_park, "Missoula": delinq_missoula}
+                     *HWM.values(), GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, MSO_TREAS_PAGE, SB_DEED_LIST, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
+DELINQ = {"Silver Bow": delinq_silverbow, "Yellowstone": delinq_yellowstone, "Gallatin": delinq_gallatin, "Park": delinq_park, "Missoula": delinq_missoula}
 TREAS_LINK = {"Yellowstone": lambda tid: f"{YC}/treasurer/propertysearch/csadelin.asp?propid={tid}"}   # csadelin shows no owner name
 # Billings code-case records are NOT linked: the city's case pages show the owner's name and mailing address.
 
@@ -348,10 +372,10 @@ def safe(name, fn, default):
 # Each lead whose delinquency comes from such a list is re-checked on the county's free iTax detail page (one GET per tax
 # id, 2 s apart, hard 20 s timeout) before it is pushed. Only tax figures are read from the page; owner fields never are.
 _STATUS = {}
-def itax_status(county, tid):
+def itax_status(county, tid, url=None):
     if tid in _STATUS: return _STATUS[tid]
     try:
-        h = get(ITAX_DETAIL[county].format(tid), timeout=20, tries=2)
+        h = get((url or ITAX_DETAIL[county]).format(tid), timeout=20, tries=2)
         f = {}
         for k in ("lblStatus", "lblYearTaxes", "lblTaxFirstHalf", "lblTaxSecondHalf", "lblPayFirstHalf", "lblPaySecondHalf"):
             m = re.search(rf'id="_ctl0_ContentPlaceHolder1_{k}"[^>]*>(.*?)</', h, re.S)
@@ -552,6 +576,14 @@ async def main():
                               (("; all of it" if abs(d["assigned_due"] - d["due"]) < 0.01 else f"; incl. ${d['assigned_due']:,.0f}") +
                                f" for {', '.join(map(str, sorted(d['assigned_years'])))} under a tax-lien assignment (lien sold to a third party; point-in-time snapshot of {ASSIGN_ASOF or 'unknown date'})"
                                if d.get("assigned_due") else ""))
+            elif d and d.get("tax_deed"):      # Silver Bow: tax-deed list (no amounts); scores only if the county page still says Delinquent
+                st_, lst = itax_status(county, p["tax"], SB_ITAX), (SOURCES.get("treasurer_delinquent") or {}).get("as_of") or "unknown date"
+                if st_ and st_["status"].strip().lower().startswith("delinquent"):
+                    sig.update(tax_points=4, tax_delinquent_hard=True, tax_delinquent_multi_year=True)
+                    labels.append(f"TAX-DEED STAGE: on the county's tax-deed property list dated {lst} (3+ years of unpaid taxes; the list gives no amounts); "
+                                  f"county tax page still shows status Delinquent, checked {dt.date.today():%Y-%m-%d}")
+                else: notes.append(f"treasurer: on the county's tax-deed list dated {lst}, but the county tax page " +
+                                   (f"now shows status '{st_['status']}'" if st_ else "could not be checked") + " (not scored)")
             elif d: labels.append(f"minor delinquent balance ${d['due']:,.0f} (under ${MIN_DELINQUENT_USD}, not scored)")
             k = addr_key(p.get("addr") or "")
             sale = (fc.get(k) or sh.get(k)) if k else None

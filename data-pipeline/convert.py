@@ -21,11 +21,14 @@ def md(iso): y, m, d = iso.split("-"); return f"{int(m)}/{int(d)}"
 def mdy(iso): y, m, d = iso.split("-"); return f"{int(m)}/{int(d)}/{y}"
 
 def tax_signal(L):
-    raw = next((s for s in L["signals"] if s.startswith("TAX DELINQUENT")), "")
+    raw = next((s for s in L["signals"] if s.startswith(("TAX DELINQUENT", "TAX-DEED STAGE"))), "")
     years, amt = L["tax_delinquent_years"], L["tax_delinquent_amount"]
     m = re.search(r"county list dated ([\d/]+)", raw)
     listed = m.group(1).lstrip("0").replace("/0", "/") if m else (L.get("data_as_of") or {}).get("treasurer_list", "")
     listed = listed.split(" (")[0]
+    if raw.startswith("TAX-DEED STAGE"):    # Silver Bow: county tax-deed list (no amounts), re-checked on the county tax page
+        m = re.search(r"list dated ([\d/]+).*?checked (\d{4}-\d\d-\d\d)", raw)
+        return [f"On the county tax-deed list: 3+ years of back taxes (list {m.group(1) if m else listed}; still delinquent on county tax page {mdy(m.group(2)) if m else ''})"]
     if L["county"] == "Natrona":    # WY: found by the per-account check on the county treasurer's tax page
         d = (L.get("data_as_of") or {}).get("treasurer_pages", "")
         out = [f"Back taxes ${amt:,.0f} (excl. interest; {yrs(years)} bill; county tax page {mdy(d) if d else ''})"]
@@ -55,7 +58,7 @@ def signals(L):
     if fs != "none":
         m = re.search(r"(\d\d/\d\d/\d{4})", fs); d = f" {m.group(1)}" if m else ""
         S.append(("Sheriff sale scheduled" if "sheriff" in fs.lower() else "Trustee (foreclosure) sale scheduled") + d)
-    if L.get("tax_delinquent") == "yes" and L.get("tax_delinquent_amount"): S += tax_signal(L)
+    if L.get("tax_delinquent") == "yes" and (L.get("tax_delinquent_amount") or any(x.startswith("TAX-DEED STAGE") for x in L["signals"])): S += tax_signal(L)
     for r in L.get("recorded_distress_docs") or []:
         S.append(f"Recorded {r.get('type', 'notice').lower()} {r.get('recorded', '')}".strip())
     for c in (L.get("code_cases") or []):
