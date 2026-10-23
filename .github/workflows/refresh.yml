@@ -1,0 +1,37 @@
+name: Weekly data refresh
+# Runs the Actor's scoring code directly on the GitHub runner ($0: no Apify runs, no secrets).
+# Commits assets/s7.dat only if it changed. Any error, a failed critical source, or 0 leads -> job fails, data untouched.
+on:
+  schedule:
+    - cron: "0 13 * * 1"   # Mondays 13:00 UTC (6am Pacific)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+          pip install -q "requests>=2.31"
+      - name: Score all three counties
+        run: python3 data-pipeline/run.py
+      - name: Build s7.dat
+        run: python3 data-pipeline/convert.py
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- assets/s7.dat; then echo "No data change"; exit 0; fi
+          git config user.name "GM Labs"
+          git config user.email "gm-labs@mail.grokbot.com"
+          git add assets/s7.dat
+          git commit -m "Weekly data refresh $(date -u +%Y-%m-%d)"
+          git push
