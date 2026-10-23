@@ -13,6 +13,9 @@ COUNTIES = {
     "Gallatin": {"orion": 6, "fips": "30031", "seat": "Bozeman"},
     "Park": {"orion": 49, "fips": "30067", "seat": "Livingston"},
     "Missoula": {"orion": 4, "fips": "30063", "seat": "Missoula"},
+    "Cascade": {"orion": 2, "fips": "30013", "seat": "Great Falls"},
+    "Lewis and Clark": {"orion": 5, "fips": "30049", "seat": "Helena"},
+    "Silver Bow": {"orion": 1, "fips": "30093", "seat": "Butte"},
 }
 
 def tax_id(county, assessment_code):
@@ -135,7 +138,7 @@ def score(sig):
 # ---------------------------------------------------------------- address cleanup
 _DIRS = {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}
 def _tc(tok):
-    if tok in _DIRS or len(tok) == 1 or re.fullmatch(r"[A-Z]?\d+[A-Z]?", tok) and not re.fullmatch(r"\d+(ST|ND|RD|TH)", tok): return tok
+    if tok in _DIRS or tok in ("US", "FS") or len(tok) == 1 or re.fullmatch(r"[A-Z]?\d+[A-Z]?", tok) and not re.fullmatch(r"\d+(ST|ND|RD|TH)", tok): return tok
     if re.fullmatch(r"\d+(ST|ND|RD|TH)", tok): return tok.lower()
     return tok[:1] + tok[1:].lower()
 

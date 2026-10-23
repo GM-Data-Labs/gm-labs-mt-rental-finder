@@ -7,7 +7,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "actor", "src")]
 import apify  # local shim
 # Missoula is built in but on HOLD (0 leads on 10/23: no public delinquent list or code cases); run it by name to test.
-COUNTIES = sys.argv[1:] or ["Yellowstone", "Gallatin", "Park", "Natrona"]
+COUNTIES = sys.argv[1:] or ["Yellowstone", "Gallatin", "Park", "Natrona", "Cascade"]
 out, stats = [], {}
 for c in COUNTIES:
     t = time.time()

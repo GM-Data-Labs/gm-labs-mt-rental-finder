@@ -93,7 +93,7 @@ footer{text-align:center;color:#80868b;font-size:12px;padding:28px 16px 36px;mar
   <p class="tag">Distressed rental finder · Montana and Wyoming</p>
 </header>
 <div class="search">
-  <select id="county" aria-label="County"><option value="">All counties</option><option>Yellowstone</option><option>Gallatin</option><option>Park</option><option value="Natrona">Natrona (Casper, WY)</option></select>
+  <select id="county" aria-label="County"><option value="">All counties</option><option>Yellowstone</option><option>Gallatin</option><option>Park</option><option value="Natrona">Natrona (Casper, WY)</option><option value="Cascade">Cascade (Great Falls)</option></select>
   <input id="q" type="search" placeholder="Address or town" aria-label="Search address or town">
 </div>
 <p class="promise">Every signal dated · Expired sales dropped automatically · No contracts, no skip-trace fees</p>
@@ -105,7 +105,7 @@ footer{text-align:center;color:#80868b;font-size:12px;padding:28px 16px 36px;mar
 <div class="checks" id="checks">
   <label class="chip"><input type="checkbox" value="sale">Trustee / sheriff sale <button type="button" class="i" aria-label="What is trustee / sheriff sale?" aria-expanded="false" data-tip="sale">i<span class="tip" role="tooltip">A foreclosure (trustee) sale, or a sheriff sale (Yellowstone only), is scheduled. The owner has a deadline, so a quick sale can beat losing the property. Expired or cancelled sales are dropped.</span></button></label>
   <label class="chip"><input type="checkbox" value="tax">Tax delinquent <button type="button" class="i" aria-label="What is tax delinquent?" aria-expanded="false" data-tip="taxd">i<span class="tip" role="tooltip">The owner is behind on property taxes (amount excludes penalty and interest; each badge says which years were confirmed and when). Growing back taxes are a common sign of a stretched owner. In Natrona (WY), every multifamily account is checked on the county treasurer's page each week; "certificate of purchase" means the taxes were sold at the county tax sale and the owner must redeem them.</span></button></label>
-  <label class="chip"><input type="checkbox" value="code_open">Open code case <button type="button" class="i" aria-label="What is open code case?" aria-expanded="false" data-tip="code">i<span class="tip" role="tooltip">Billings only (Bozeman, Livingston and Casper publish no code-case data): the city has an open code-enforcement case on the property. Repairs cost money, and some owners would rather sell.</span></button></label>
+  <label class="chip"><input type="checkbox" value="code_open">Open code case <button type="button" class="i" aria-label="What is open code case?" aria-expanded="false" data-tip="code">i<span class="tip" role="tooltip">Billings only (Bozeman, Livingston, Casper and Great Falls publish no code-case data): the city has an open code-enforcement case on the property. Repairs cost money, and some owners would rather sell.</span></button></label>
   <label class="chip"><input type="checkbox" value="absentee">Absentee owner <button type="button" class="i" aria-label="What is absentee owner?" aria-expanded="false" data-tip="abs">i<span class="tip" role="tooltip">Inferred from the owner's mailing address on record: it is not the property. Remote owners tend to be less attached and more willing to sell.</span></button></label>
   <label class="chip"><input type="checkbox" value="out_of_state">Out-of-state owner <button type="button" class="i" aria-label="What is out-of-state owner?" aria-expanded="false" data-tip="oos">i<span class="tip" role="tooltip">Inferred from the owner's mailing address on record: it is outside Montana. Managing a rental from far away is hard, so these owners often want out.</span></button></label>
   <label class="chip"><input type="checkbox" value="long_owned">Owned 10+ years <button type="button" class="i" aria-label="What is owned 10+ years?" aria-expanded="false" data-tip="long">i<span class="tip" role="tooltip">Same owner for 10+ years. Long-time owners often have lots of equity and may be ready to retire or cash out.</span></button></label>
@@ -131,7 +131,7 @@ const PER = 10; let all = [], shown = [], pg = 1, map, layer, view = "list";
    If set, it MUST be restricted to HTTP referrer gm-data-labs.github.io/* and to the Street View Static API only. */
 const SV_KEY = "";
 const PH = '<div class="thumb ph" aria-hidden="true"></div>';
-const svLoc = L => L.lat && L.lon ? L.lat + "," + L.lon : [L.address, L.city !== "unknown" ? L.city : "", L.county === "Natrona" ? "WY" : "MT"].filter(Boolean).join(", ");
+const svLoc = L => L.lat && L.lon ? L.lat + "," + L.lon : [L.address, L.city !== "unknown" ? L.city : "", ({Natrona: "WY"})[L.county] || "MT"].filter(Boolean).join(", ");
 const mapsHref = L => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(svLoc(L))}`;
 const svHref = L => L.lat && L.lon ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${L.lat},${L.lon}`
                                   : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(svLoc(L))}`;

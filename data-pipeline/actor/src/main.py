@@ -25,12 +25,15 @@ def _mt_today():
 SALE_TODAY = _mt_today()   # sale dates are local (Montana) dates
 EXCLUDE_PTYPES = {"Mobile/RV Parks", "Non-Valued Property", "Non-Valued with Specials", "Exempt Property", "CN - Centrally Assessed Non-Valued Property", "CA - Centrally Assessed"}
 YC = "https://www.yellowstonecountymt.gov"
-HWM_MT = "https://www.halliday-watkins.com/live/MT/bids.htm"
+HWM = {st: f"https://www.halliday-watkins.com/live/{st}/bids.htm" for st in ("MT", "WY", "ID")}   # one sale list per state, same table layout
+HWM_MT = HWM["MT"]
 BIL_CODE = "https://billingsgis.com/arcgis_public/rest/services/ArcOnline_Public/BuildingPermits_CodeViolations_EXT/MapServer/{}/query"
 # NOT linked (Boss rule 2026-10-19: no links to pages that show owner names, mailing addresses or document parties):
 # Montana Cadastral parcel pages, Gallatin / Park iTax pages, Yellowstone recorder documents, Billings code-case records.
 # Each row carries the plain-text id instead (geocode, tax id, document number) plus a note on where to look it up.
-TAX_SITE = {"Gallatin": "the Gallatin County Treasurer's online tax search (iTax)", "Park": "the Park County Treasurer's online tax search (iTax)", "Missoula": "the Missoula County Treasurer's online tax search (iTax)"}
+TAX_SITE = {"Gallatin": "the Gallatin County Treasurer's online tax search (iTax)", "Park": "the Park County Treasurer's online tax search (iTax)", "Missoula": "the Missoula County Treasurer's online tax search (iTax)",
+            "Cascade": "the Cascade County Treasurer's online tax search (iTax)", "Lewis and Clark": "the Lewis and Clark County Treasurer's office",
+            "Silver Bow": "the Butte-Silver Bow Treasurer's office"}
 ITAX_DETAIL = {"Gallatin": "https://itax.gallatin.mt.gov/detail.aspx?taxid={}", "Park": "https://itax.tylertech.com/ParkMT/detail.aspx?taxid={}"}
 MIXED_NA = "n/a (only assessed for 5+ units)"
 ASSIGN_ASOF = None # date of the tax-lien assignment snapshot (Yellowstone), set by delinq_yellowstone()
@@ -231,7 +234,7 @@ def delinq_missoula(parcels, cad):
     return recs
 
 SAFE_URL_PREFIXES = (YC + "/treasurer/propertysearch/csadelin.asp", YC + "/Sheriff/SheriffSales.asp", YC + "/treasurer/TaxSales.asp",
-                     HWM_MT, GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, MSO_TREAS_PAGE, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
+                     *HWM.values(), GALLATIN_DLQ_PAGE, PARK_TREAS_PAGE, MSO_TREAS_PAGE, "https://services.arcgis.com/qnjIrwR8z5Izc0ij/arcgis/rest/services/Montana_Cadastral_Framework/FeatureServer/1")
 DELINQ = {"Yellowstone": delinq_yellowstone, "Gallatin": delinq_gallatin, "Park": delinq_park, "Missoula": delinq_missoula}
 TREAS_LINK = {"Yellowstone": lambda tid: f"{YC}/treasurer/propertysearch/csadelin.asp?propid={tid}"}   # csadelin shows no owner name
 # Billings code-case records are NOT linked: the city's case pages show the owner's name and mailing address.
@@ -252,19 +255,20 @@ def _sale_date(txt):
     try: return dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2))) if m else None
     except ValueError: return None
 
-def hwm_sales(county):
-    """Only sales dated today or later with no cancelled / postponed / sold status count (a past or dead sale must never score or qualify)."""
-    h = get(HWM_MT); out = {}; skipped = 0
-    for row in re.findall(r"<tr>(.*?)</tr>", h, re.S):
-        c = [strip_tags(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
-        if len(c) >= 5 and c[1].strip().lower() == county.lower():
+def hwm_sales(county, state="MT", today=None):
+    """Halliday, Watkins & Mann trustee-sale list for one county of MT, WY or ID (same table on every state page).
+    Only sales dated today or later with no cancelled / postponed / sold status count (a past or dead sale must never score or qualify)."""
+    url = HWM[state]; h = get(url); out = {}; skipped = 0; today = today or SALE_TODAY
+    for row in re.findall(r"<tr>(.*?)</tr>", h, re.S | re.I):
+        c = [strip_tags(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)]
+        if len(c) >= 5 and c[1].strip().lower() == county.lower() and c[2].strip().upper() in ("", state):
             d = _sale_date(c[4]); status = " ".join(c[7:]) if len(c) > 7 else ""
-            if d is None or d < SALE_TODAY or DEAD_SALE_RE.search(status): skipped += 1; continue
+            if d is None or d < today or DEAD_SALE_RE.search(status): skipped += 1; continue
             for street in split_addresses(c[3].split(",")[0]):
                 if is_unit_address(street): continue                  # '#Apt 11', 'Condo A': a unit, not the building
                 k = addr_key(street)
                 if k: out[k] = f"trustee/foreclosure sale {d:%m/%d/%Y} (Halliday, Watkins & Mann file {c[0]})"
-    SOURCES["foreclosure_firm_list"] = {"ok": True, "rows": len(out), "skipped_past_or_cancelled": skipped, "url": HWM_MT}
+    SOURCES["foreclosure_firm_list"] = {"ok": True, "rows": len(out), "skipped_past_or_cancelled": skipped, "url": url}
     return out
 
 def sheriff_yellowstone():
@@ -498,7 +502,9 @@ async def main():
             cty, lv = situs_city(r.get("CityStateZip")), (r.get("LevyDistrict") or "").strip()
             if cty and lv: _lc.setdefault(lv, collections.Counter())[cty] += 1
         levy_city = {lv: C.most_common(1)[0][0] for lv, C in _lc.items() if C.most_common(1)[0][1] >= 5 and C.most_common(1)[0][1] >= 0.9 * sum(C.values())}
-        delq = safe("treasurer_delinquent", (lambda: delinq_missoula(parcels, cad)) if county == "Missoula" else DELINQ[county], {})
+        def no_list():     # e.g. Cascade, Lewis and Clark: no public bulk delinquent list (per-parcel lookup or records request only)
+            SOURCES["treasurer_delinquent"] = {"ok": True, "rows": 0, "note": f"{county} County publishes no bulk delinquent-tax list; trustee sales only"}; return {}
+        delq = safe("treasurer_delinquent", (lambda: delinq_missoula(parcels, cad)) if county == "Missoula" else DELINQ.get(county, no_list), {})
         fc = safe("foreclosure_firm_list", lambda: hwm_sales(county), {})
         sh, co, cc = {}, {}, {}
         if county == "Yellowstone":

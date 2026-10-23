@@ -12,10 +12,8 @@ from common import HARD_SIGNALS, MIN_DELINQUENT_USD, addr_key, clean_address, is
 
 HERE = os.path.dirname(os.path.abspath(__file__)); DATA = os.path.join(os.path.dirname(HERE), "data")
 TREAS = "https://treasurersearch.natronacounty-wy.gov/"
-HWM_WY = "https://www.halliday-watkins.com/live/WY/bids.htm"
 UA = {"User-Agent": "Mozilla/5.0 (GM Labs research; low-rate)"}
 GAP, BUDGET = 0.8, 1800          # seconds between treasurer requests; hard 30-minute budget for the whole pass
-DEAD = re.compile(r"cancel|postpon|continued|vacated|withdrawn|completed|\bsold\b|on hold|stayed|bankrupt|\bBK\b", re.I)
 
 def _text(h):
     h = re.sub(r"<script.*?</script>|<style.*?</style>|<input[^>]*>", "", h, flags=re.S | re.I)
@@ -30,16 +28,10 @@ def treasurer(acct, S):
     return hist, (st.group(1).strip() if st else "")
 
 def sales():
-    h = requests.get(HWM_WY, headers=UA, timeout=60).text; out = {}; skipped = 0
-    today = dt.date.today()
-    for row in re.findall(r"<tr>(.*?)</tr>", h, re.S | re.I):
-        c = [htmlmod.unescape(re.sub(r"<[^>]+>", " ", x)).strip() for x in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)]
-        if len(c) >= 5 and c[1].lower() == "natrona":
-            m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{4})", c[4]); d = dt.date(int(m.group(3)), int(m.group(1)), int(m.group(2))) if m else None
-            if d is None or d < today or DEAD.search(" ".join(c[7:])): skipped += 1; continue
-            street = c[3].split(",")[0]
-            if not is_unit_address(street) and addr_key(street): out[addr_key(street)] = f"trustee/foreclosure sale {d:%m/%d/%Y} (Halliday, Watkins & Mann file {c[0]})"
-    return out, skipped
+    """WY trustee sales: the shared Halliday, Watkins & Mann parser (main.hwm_sales), Wyoming page."""
+    import main
+    out = main.hwm_sales("Natrona", "WY", today=dt.date.today())
+    return out, main.SOURCES["foreclosure_firm_list"]["skipped_past_or_cancelled"]
 
 def run(min_score=4):
     snap = json.load(gzip.open(os.path.join(DATA, "natrona.json.gz"), "rt")); P = snap["parcels"]
